@@ -5,7 +5,6 @@
  * 
  * 
  */
-
 const admin = require('firebase-admin');
 const express = require('express');
 const https = require('https');
@@ -21,8 +20,51 @@ const hostRef = db.collection('host');
 const getHostDocById = (hostId) => hostRef.doc(hostId).get().then((snap) => snap.exists ? snap : false)
 const getHostDocByName = (host) => hostRef.where("host", "==", host).get().then((snap) => snap.empty ? false : snap.docs[0])
 
+const PROD_ENV = process.env.NODE_ENV === "production";
+
+const CLOUD_FUNCTIONS_DOMAIN = "cloudfunctions.net"
+const DEFAULT_REGION = "us-central1"
+
+const CONFIG = {
+    project_endpoint: PROD_ENV ? "https://" + process.env.X_GOOGLE_FUNCTION_REGION + "-" + process.env.X_GOOGLE_GCLOUD_PROJECT + "." + CLOUD_FUNCTIONS_DOMAIN  :
+        "http://localhost:5000/" + process.env.GCLOUD_PROJECT + "/"  + DEFAULT_REGION,
+
+    function_timeout_sec: PROD_ENV ? parseInt(process.env.X_GOOGLE_FUNCTION_TIMEOUT_SEC) : 60,
+    gcloud_project: PROD_ENV ? process.env.X_GOOGLE_GCLOUD_PROJECT : process.env.GCLOUD_PROJECT,
+    function_region: PROD_ENV ? process.env.X_GOOGLE_FUNCTION_REGION : DEFAULT_REGION,
+    function_name: PROD_ENV ? process.env.X_GOOGLE_FUNCTION_NAME : process.env.FUNCTION_NAME,
+}
+/* 
+//process.env when deployed:
+process.env = 
+{
+    "X_GOOGLE_FUNCTION_REGION": "us-central1",
+    "GCLOUD_PROJECT": "<project name>",
+    "FUNCTION_NAME": "api",
+    "X_GOOGLE_GCLOUD_PROJECT": "<project name>",
+    "FUNCTION_REGION": "us-central1",
+    "PWD": "/user_code",
+    "FUNCTION_TRIGGER_TYPE": "HTTP_TRIGGER",
+    "FUNCTION_TIMEOUT_SEC": "60",
+    "X_GOOGLE_FUNCTION_TRIGGER_TYPE": "HTTP_TRIGGER",
+    "NODE_ENV": "production",
+    "SHLVL": "1",
+    "X_GOOGLE_FUNCTION_NAME": "api",
+    "X_GOOGLE_ENTRY_POINT": "api",
+    "X_GOOGLE_FUNCTION_IDENTITY": "<project name>@appspot.gserviceaccount.com",
+    "X_GOOGLE_GCP_PROJECT": "<project name>",
+    "X_GOOGLE_FUNCTION_TIMEOUT_SEC": "60",
+    "ENTRY_POINT": "api",
+    "FIREBASE_CONFIG": "{\"projectId\":\"<project name>\",\"databaseURL\":\"https://<project name>.firebaseio.com\",\"storageBucket\":\"<project name>.appspot.com\"}"
+}
+*/
+
 // allow only content-type=application/json 
 api.use(helpers.validateContentType);
+
+//api.get("/base",(req,res)=> {
+//    res.send(CONFIG.baseURL + req.path);
+//})
 
 // /host : TRACKING HOST ENDPOINT
 
@@ -108,21 +150,23 @@ api.get("/host/verifydns/:verification_key", (req, res) => {
 // method: POST
 // params : hostname or host id
 const processDNSVerification = (req, res, hostDoc) => {
-    const baseURL = "/hzdtrack/us-central1";
-    const protocol_ = req.secure ? "https:" : "http:";
-    const moduleToUse = req.secure ? https : http;
-    const defaultPort = req.secure ? 443 : 80;
+
+    const verifyDnsPath = "/" + CONFIG.function_name + "/host/verifydns"  
+    const emulatorPrefix = PROD_ENV ? "" : "/" + CONFIG.gcloud_project + "/" + CONFIG.function_region
+    const protocol_ = PROD_ENV ? "https:" : "http:";
+    const moduleToUse = PROD_ENV ? https : http;
+    const defaultPort = PROD_ENV ? 443 : 80;
+
     hostDoc
         .then((docRef) => {
             if (docRef) {
-
                 var details = {
                     protocol: protocol_,
                     hostname: docRef.data().host.split(":")[0],
                     port: parseInt(docRef.data().host.split(":")[1]) || defaultPort,
                     method: "GET",
                     headers: { "content-type": "application/json" },
-                    path: baseURL + "/api/host/verifydns/" + docRef.data().verification_key
+                    path: emulatorPrefix + verifyDnsPath + docRef.data().verification_key
                 }
                 return new Promise((resolve, reject) => {
                     moduleToUse.request(details, (response) => {
