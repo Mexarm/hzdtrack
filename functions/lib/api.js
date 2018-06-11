@@ -26,8 +26,8 @@ const CLOUD_FUNCTIONS_DOMAIN = "cloudfunctions.net"
 const DEFAULT_REGION = "us-central1"
 
 const CONFIG = {
-    project_endpoint: PROD_ENV ? "https://" + process.env.X_GOOGLE_FUNCTION_REGION + "-" + process.env.X_GOOGLE_GCLOUD_PROJECT + "." + CLOUD_FUNCTIONS_DOMAIN  :
-        "http://localhost:5000/" + process.env.GCLOUD_PROJECT + "/"  + DEFAULT_REGION,
+    project_endpoint: PROD_ENV ? "https://" + process.env.X_GOOGLE_FUNCTION_REGION + "-" + process.env.X_GOOGLE_GCLOUD_PROJECT + "." + CLOUD_FUNCTIONS_DOMAIN :
+        "http://localhost:5000/" + process.env.GCLOUD_PROJECT + "/" + DEFAULT_REGION,
 
     function_timeout_sec: PROD_ENV ? parseInt(process.env.X_GOOGLE_FUNCTION_TIMEOUT_SEC) : 60,
     gcloud_project: PROD_ENV ? process.env.X_GOOGLE_GCLOUD_PROJECT : process.env.GCLOUD_PROJECT,
@@ -151,7 +151,7 @@ api.get("/host/verifydns/:verification_key", (req, res) => {
 // params : hostname or host id
 const processDNSVerification = (req, res, hostDoc) => {
 
-    const verifyDnsPath = "/" + CONFIG.function_name + "/host/verifydns"  
+    const verifyDnsPath = "/" + CONFIG.function_name + "/host/verifydns/"
     const emulatorPrefix = PROD_ENV ? "" : "/" + CONFIG.gcloud_project + "/" + CONFIG.function_region
     const protocol_ = PROD_ENV ? "https:" : "http:";
     const moduleToUse = PROD_ENV ? https : http;
@@ -160,30 +160,32 @@ const processDNSVerification = (req, res, hostDoc) => {
     hostDoc
         .then((docRef) => {
             if (docRef) {
-                var details = {
-                    protocol: protocol_,
-                    hostname: docRef.data().host.split(":")[0],
-                    port: parseInt(docRef.data().host.split(":")[1]) || defaultPort,
-                    method: "GET",
-                    headers: { "content-type": "application/json" },
-                    path: emulatorPrefix + verifyDnsPath + docRef.data().verification_key
-                }
-                return new Promise((resolve, reject) => {
-                    moduleToUse.request(details, (response) => {
-                        var dataPromise = new Promise((resolve1, reject1) => response.on("data", resolve1).on("error", reject1)); //@@TODO collect all data chunks correctly
-                        resolve(Promise.all([response, dataPromise]))
-                    }).on("error", reject).end()
-                })
-            }
-            else {
-                return false;
+                return docRef
+            } else {
+                throw e.notFound.message
             }
         })
-        .then(([response, data]) => response)
-        .then((response) => response.statusCode === 200)
-        .then((ok) => ok ? res.send({ "message": "host dns settings are valid" }) : res.status(e.invalidRequest.code).send(e.invalidRequest.error))
+        .then((docRef) => {
+            console.log("docref is good");
+            return {
+                protocol: protocol_,
+                hostname: docRef.data().host.split(":")[0],
+                port: parseInt(docRef.data().host.split(":")[1]) || defaultPort,
+                method: "GET",
+                headers: { "content-type": "application/json" },
+                path: emulatorPrefix + verifyDnsPath + docRef.data().verification_key
+            }
+        })
+        .then((options) => helpers.makeRequest(moduleToUse, options))
+        .then(([response, body]) => {
+            console.log(response.statusCode, body)
+            return [response, body];
+        })
+        //.then(([response, body]) => response.statusCode === 200)
+        //.then((response) => response.statusCode === 200)
+        .then(([response, body]) => response.statusCode === 200 ? res.send(body) : res.status(e.invalidRequest.code).send(e.invalidRequest.error))
         .catch((error) => {
-            console.log(JSON.stringify(error));
+
             res.status(404).send(error);
         })
 }
