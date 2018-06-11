@@ -14,6 +14,14 @@ error.invalidRequiredParams = {
     }
 }
 
+error.invalidRequest = {
+    "code" : 400,
+    "error": {
+        "error_code": "invalid_request",
+        "message": "invalid request"
+    }
+}
+
 error.alreadyExists = {
     "code": 400,
     "error": {
@@ -53,4 +61,13 @@ error.notFound = {
         "error_message": "not found"
     }
 }
+
+error.verificationError = {
+    code: 404,
+    "error": {
+        "error_code": "verification_error",
+        "error_message" : "verification error"
+    }
+}
+
 module.exports = error;
