@@ -162,11 +162,10 @@ const processDNSVerification = (req, res, hostDoc) => {
             if (docRef) {
                 return docRef
             } else {
-                throw e.notFound.message
+                throw e.notFound.error
             }
         })
         .then((docRef) => {
-            console.log("docref is good");
             return {
                 protocol: protocol_,
                 hostname: docRef.data().host.split(":")[0],
@@ -177,15 +176,9 @@ const processDNSVerification = (req, res, hostDoc) => {
             }
         })
         .then((options) => helpers.makeRequest(moduleToUse, options))
-        .then(([response, body]) => {
-            console.log(response.statusCode, body)
-            return [response, body];
-        })
-        //.then(([response, body]) => response.statusCode === 200)
-        //.then((response) => response.statusCode === 200)
         .then(([response, body]) => response.statusCode === 200 ? res.send(body) : res.status(e.invalidRequest.code).send(e.invalidRequest.error))
         .catch((error) => {
-
+            console.log(error);
             res.status(404).send(error);
         })
 }
